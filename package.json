@@ -1,0 +1,14 @@
+{
+  "name": "dough",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Assignment and measurement layer for Project Bread",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node adapters/do-node.js",
+    "test": "node --test test/*.test.js"
+  }
+}

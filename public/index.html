@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Project Bread — assignment harness</title>
+  </head>
+  <body>
+    <!--
+      Placeholder origin document. The real SPA build drops in here.
+
+      The only contract it needs to honour: read window.__BREAD__, render what
+      it says, and never mint an assignment of its own. By the time any script
+      on this page runs, the edge handler has already injected the assignment
+      above this comment.
+    -->
+    <main>
+      <h1>Project Bread</h1>
+      <p>Assignment harness. Inspect <code>window.__BREAD__</code>.</p>
+      <pre id="out">reading…</pre>
+    </main>
+
+    <script>
+      // Illustrates the read-only contract the SPA will follow.
+      var out = document.getElementById('out');
+      out.textContent = window.__BREAD__
+        ? JSON.stringify(window.__BREAD__, null, 2)
+        : 'No assignment: this request was not an eligible mobile paid-search visit.';
+    </script>
+  </body>
+</html>
