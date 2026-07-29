@@ -35,7 +35,10 @@ src/lib/barcode.js          derive, format, parse
 src/lib/spec.js             factor definitions and the immutability rule
 src/lib/eligibility.js      paid-traffic and mobile detection
 src/lib/cookie.js           the single cookie
+src/lib/token.js            signed ?b= tokens for letters and emails
 src/lib/hash.js             FNV-1a, identical across runtimes
+
+tools/mint-tokens.js        mint a mailing's tokens (runs on Node, not the edge)
 
 adapters/do-node.js                    DigitalOcean — DISPOSABLE
 adapters/contentstack/functions/[edge].js   Contentstack — one re-export line
@@ -73,6 +76,7 @@ request
   │
   └─ everything else
        │
+       ├─ valid ?b= token ─────────────────────► SEEDED (mail/email assignment)
        ├─ cookie present & valid ──────────────► RESTORED (never re-rolled)
        ├─ no cookie, eligible ─────────────────► ENROLLED (mint + Set-Cookie)
        └─ no cookie, not eligible ─────────────► INELIGIBLE (no cookie set)
@@ -87,6 +91,15 @@ request
 **A present cookie is never re-evaluated.** Not against eligibility, not
 against a clock. The original silently re-randomized enrolled units after 90
 days. Enrolment happens exactly once, ever.
+
+**One exception: a verified mail token outranks a cookie.** It is not a re-roll
+— the token carries an assignment decided server-side at mail time for a known
+account, fixed for that recipient forever, so re-scanning the same QR always
+yields the same result. Honouring it is what makes mail-level randomization
+possible; if the cookie won, anyone who browsed before their letter arrived
+would silently drop out of the mailing's assignment and its denominator would
+stop matching what shipped. Disagreements are reported as `bread_conflict`, not
+hidden.
 
 **Ineligible visitors are not persisted.** Enrolment should happen at first
 *qualifying* exposure. Stamping a permanent "ineligible" on someone who
@@ -120,6 +133,7 @@ one.
 | `BREAD_SPEC` | `legacy` | `aa` (no factors), `legacy` (22,032 combos) or `focused` (9). See below. |
 | `BREAD_TEST_SHARE_BPS` | `5000` | Basis points of 10,000. `5000` = 50/50, `1000` = 10% ramp. |
 | `BREAD_COOKIE_DOMAIN` | *(unset)* | **Must stay unset on DigitalOcean** — `ondigitalocean.app` is a public suffix, so a `Domain` attribute is silently rejected. In production set `.midlandcredit.com` so `accounts.midlandcredit.com` can read the assignment. |
+| `BREAD_TOKEN_SECRET` | *(unset)* | HMAC secret for mail/email `?b=` tokens. Unset disables token handling entirely. Must match whatever `tools/mint-tokens.js` was run with. |
 | `PORT` | `8080` | DigitalOcean adapter only. |
 
 ## Which spec to run

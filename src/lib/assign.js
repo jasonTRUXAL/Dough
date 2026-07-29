@@ -66,8 +66,44 @@ export const DEFAULT_CONFIG = Object.freeze({
  *    stamping a permanent "ineligible" on someone who has not yet had that
  *    exposure would wrongly exclude them forever.
  */
-export function decide({ url, headers, cookies = {}, spec, config = DEFAULT_CONFIG, now, newId }) {
+export function decide({ url, headers, cookies = {}, spec, config = DEFAULT_CONFIG, now, newId, seeded = null }) {
   const existing = decodeAssignmentCookie(cookies[COOKIE_NAME]);
+
+  // A verified token from a letter or email outranks a cookie.
+  //
+  // This is the one deliberate exception to rule 1 above, and it is not a
+  // re-roll: the token carries an assignment decided server-side at mail time
+  // for a known account, which is a stronger identity claim than an anonymous
+  // browser cookie and is fixed for that recipient forever. Re-scanning the
+  // same QR code always yields the same assignment.
+  //
+  // Honouring it is what makes mail-level randomization possible at all — if
+  // the cookie won, anyone who had browsed before receiving their letter would
+  // silently drop out of the mailing's assignment and the mail experiment's
+  // denominator would stop matching what was sent.
+  //
+  // A disagreement between token and cookie is real and worth counting: it
+  // means this device previously enrolled under a different unit. It is
+  // reported rather than hidden, because a rising conflict rate means the
+  // mailing list and the web population overlap more than the design assumed.
+  if (seeded) {
+    const conflict = existing && existing.assignmentId !== seeded.assignmentId
+      ? existing.assignmentId
+      : null;
+
+    return {
+      outcome: 'seeded',
+      conflict,
+      shouldSetCookie: !existing || conflict !== null,
+      assignment: buildAssignment(
+        seeded.assignmentId,
+        existing && !conflict ? existing.enrolledAt : Math.floor(now / 1000),
+        spec,
+        config,
+        { arm: seeded.arm, campaign: seeded.campaign },
+      ),
+    };
+  }
 
   if (existing) {
     return {
@@ -97,8 +133,11 @@ export function decide({ url, headers, cookies = {}, spec, config = DEFAULT_CONF
   };
 }
 
-function buildAssignment(assignmentId, enrolledAt, spec, config) {
-  const arm = deriveArm(assignmentId, config.testShareBps);
+function buildAssignment(assignmentId, enrolledAt, spec, config, seed = {}) {
+  // A token may pin the arm at mail time. When it does not, the arm is derived
+  // from the id exactly as it is for web traffic, so a mailing can choose
+  // per-drop whether to control the split itself or inherit the global one.
+  const arm = seed.arm || deriveArm(assignmentId, config.testShareBps);
 
   // Two cases produce no barcode:
   //
@@ -117,5 +156,8 @@ function buildAssignment(assignmentId, enrolledAt, spec, config) {
     arm,
     barcode: varied ? deriveBarcode(assignmentId, spec) : null,
     factors: varied ? deriveFactors(assignmentId, spec) : null,
+    // Which mailing this unit came from, so response can be attributed to a
+    // specific drop rather than pooled across every letter ever sent.
+    campaign: seed.campaign || null,
   };
 }

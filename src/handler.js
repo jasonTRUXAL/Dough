@@ -21,6 +21,10 @@
 import { decide, DEFAULT_CONFIG } from './lib/assign.js';
 import { COOKIE_NAME, encodeAssignmentCookie, parseCookies, serializeCookie } from './lib/cookie.js';
 import { specByName, specVersion } from './lib/spec.js';
+import { verifyToken } from './lib/token.js';
+
+/** Query parameter carrying the signed token. Short, because it rides in QR codes. */
+export const TOKEN_PARAM = 'b';
 
 export default async function handler(request, context = {}) {
   const env = context.env || {};
@@ -33,6 +37,15 @@ export default async function handler(request, context = {}) {
   const spec = specByName(env.BREAD_SPEC || 'legacy');
   const config = configFromEnv(env);
 
+  // A signed token from a QR code or link in a letter or email. Verification
+  // failure is indistinguishable from absence on purpose — a URL that has been
+  // through print, a scanner and a mail client has many ways to arrive damaged,
+  // and the right response to all of them is to assign the visitor normally
+  // rather than to fail the request.
+  const seeded = env.BREAD_TOKEN_SECRET
+    ? await verifyToken(url.searchParams.get(TOKEN_PARAM), env.BREAD_TOKEN_SECRET)
+    : null;
+
   const decision = decide({
     url,
     headers: request.headers,
@@ -41,6 +54,7 @@ export default async function handler(request, context = {}) {
     config,
     now: Date.now(),
     newId: () => crypto.randomUUID(),
+    seeded,
   });
 
   const originResponse = await fetch(request);
@@ -124,7 +138,7 @@ function injectBootstrap(html, decision, spec) {
     assignment: decision.assignment,
   };
 
-  const snippet = `<script>window.__BREAD__=${safeJson(payload)};window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:"bread.assignment",bread_outcome:${safeJson(payload.outcome)},bread_assignment_id:${safeJson(decision.assignment?.assignmentId ?? null)},bread_arm:${safeJson(decision.assignment?.arm ?? null)},bread_barcode:${safeJson(decision.assignment?.barcode ?? null)},bread_spec:${safeJson(payload.specVersion)}});</script>`;
+  const snippet = `<script>window.__BREAD__=${safeJson(payload)};window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:"bread.assignment",bread_outcome:${safeJson(payload.outcome)},bread_assignment_id:${safeJson(decision.assignment?.assignmentId ?? null)},bread_arm:${safeJson(decision.assignment?.arm ?? null)},bread_barcode:${safeJson(decision.assignment?.barcode ?? null)},bread_campaign:${safeJson(decision.assignment?.campaign ?? null)},bread_conflict:${safeJson(decision.conflict ?? null)},bread_spec:${safeJson(payload.specVersion)}});</script>`;
 
   const headClose = html.indexOf('</head>');
   if (headClose === -1) {

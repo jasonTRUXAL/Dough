@@ -57,56 +57,95 @@ If there is no answer, do not run the test.
 
 ## The two numbers that decide whether a test is worth running
 
-### 1. Effect size vs. sample size
+### 1. Effect size vs. sample size — and base rate
 
-Sessions required per arm to detect a lift on a 10% base rate, 80% power,
-p < 0.05:
+Sessions required per arm, 80% power, p < 0.05. **The base rate matters as much
+as the effect size**, and it is the number most often assumed rather than
+looked up:
 
-| Relative lift | Sessions per arm | What produces an effect this size |
-| --- | --- | --- |
-| 3% | **~160,000** | rewording a headline |
-| 10% | ~14,700 | a meaningfully different layout |
-| 20% | **~3,800** | a genuinely different offer |
-| 30% | ~1,800 | removing a real barrier |
+| Base rate | 3% relative lift | 5% | 10% | 20% |
+| --- | --- | --- | --- | --- |
+| 10% | ~160,000 | ~58,000 | ~14,700 | ~3,800 |
+| **40%** | ~26,200 | ~9,500 | **~2,400** | ~600 |
+| **60%** | ~10,900 | ~4,100 | **~1,000** | ~250 |
 
-Cosmetic variants — headline wording, theme colour, security icons — move
-conversion 1-3% relative, when they move it at all. Twelve headline arms at 3%
-needs roughly **1.9 million eligible mobile paid sessions**.
+Higher base rates make the same *relative* lift far easier to detect. At MCM's
+measured ~60% login-form engagement, a 10% relative improvement needs roughly
+**1,000 sessions per arm** — completely reachable. At the 10% base rate one
+might naively assume, the same test looks impossible.
 
-**You cannot buy significance with sample size. You have to test bigger
-differences.** This is the single most important sentence in this document.
+Get the real base rate before computing anything. An assumed one will be wrong
+by a factor that changes the decision.
 
-### 2. Population dilution
+What remains true regardless: cosmetic variants (headline wording, theme
+colour, security icons) move conversion 1-3% relative, and twelve arms of
+anything multiplies the bill twelvefold. **Prefer fewer arms and bigger
+differences** — that principle survives the base rate correction, even though
+the specific "unreachable" verdicts do not.
+
+### 2. Where the funnel actually leaks
+
+Roughly **60% of sessions engage the login form**. That is a high engagement
+rate, and it relocates the problem entirely.
+
+The page is not failing to persuade people to try. Whatever is being lost is
+lost *inside the login flow* — between typing an account number and getting in.
+Which means every cosmetic factor in the original design was optimizing a step
+that already works, and the one factor sitting exactly where the loss occurs —
+`L#`, the login form variant — was the one omitted from the barcode.
+
+The flow also includes MFA (`accounts.midlandcredit.com/ssc-mfa-ui/`). Mailed
+credentials plus MFA on a phone is a plausible place to lose a meaningful share
+of that 60%.
+
+**The number that decides the next test: of the ~60% who engage, what fraction
+complete?** That gap is the opportunity, and it is measured, not guessed.
+
+### 3. Population dilution — smaller than it first appears
 
 MCM buys debt, generates an internal account number, and **mails** it. There is
-no registration form. So a visitor without that letter *cannot log in*, no
-matter what the page says. No headline creates a credential.
+no registration form, so a visitor without their letter cannot log in at all.
 
-Your paid mobile traffic therefore contains two populations with nothing in
-common:
+That sounds like severe dilution, and would be if the traffic were general. It
+is not: paid search targets people looking for how to pay off or log into
+existing accounts, and the 60% engagement rate confirms the arriving population
+is largely credentialed. **Treat dilution as a modest correction here, not a
+dominant one.**
 
-| | Can log in? | What the page can do for them |
-| --- | --- | --- |
-| **Has the letter** | Yes | Build trust, get them to the login fast |
-| **No letter** | **No** | Verify legitimacy, request account info, initiate contact |
-
-The original test measured them together, against a metric only one of them
-could move. If the effect exists only in the credentialed group and that group
-is 40% of traffic, the observed effect is 40% of the true one — and sample size
-scales with the inverse square of effect size:
-
-| Scenario | True lift | Observed lift | Sessions per arm |
-| --- | --- | --- | --- |
-| Credentialed only | 20% | 20% | ~3,800 |
-| Diluted across both | 20% | 8% | **~22,800** |
-
-**Dilution alone is a ~6x sample penalty.** Stack it on cosmetic effect sizes
-and the original test was unpowerable by orders of magnitude. This is a better
-explanation for "we sent the data correctly and still found nothing" than any
-tracking defect, and unlike the tracking defects it is not fixed by anything in
-`src/`.
+It still matters for two things: no-letter visitors need their own success
+metric (they can currently only read about MCM, which is a content gap worth
+addressing on its own terms), and any segment analysis must account for them
+rather than pooling them into a login-based metric they cannot move.
 
 ---
+
+## The mail and email channel
+
+Letters and emails can carry a QR code or link with a **signed assignment
+token** (`?b=...`). This is a better experimental substrate than paid search,
+and not only for convenience:
+
+- **Randomization happens at mail time, server-side**, before the visit exists.
+  No coin flip in a browser, no cookie needed for first touch. The entire class
+  of persistence bugs that sank the original run becomes structurally
+  impossible.
+- **The denominator is known exactly.** You sent N letters. Sample ratio
+  mismatch stops being a statistical inference and becomes arithmetic — compare
+  the mint log against what shipped.
+- **The unit is an account**, so outcomes can be followed through to payment
+  rather than stopping at login as a proxy.
+- **Email is a fast, cheap pre-test.** Randomize email content, measure
+  click-through in days instead of months, promote only winners to print. Given
+  the traffic constraints, this is the fastest learning loop available.
+
+Mint with `tools/mint-tokens.js`; the handler verifies and honours tokens when
+`BREAD_TOKEN_SECRET` is set. A token outranks a cookie — see the note in
+`src/lib/assign.js` for why, and note that conflicts are counted rather than
+hidden.
+
+Because the mail channel controls its own split, a mailing can pin arms at mint
+time (`--split`) or inherit the global derivation. Pin it when the mailing *is*
+the experiment.
 
 ## Consequences
 
@@ -241,17 +280,21 @@ weeks of traffic; not finding it out costs a quarter and another failed program.
 
 Run the funnel diagnosis concurrently — it needs no test infrastructure.
 
-**Phase 2 — triage test.** Two arms: current generic page vs. a page that asks
-whether the visitor has their letter and routes accordingly. Primary metric
-differs by branch; guardrails on both.
+**Phase 2 — login completion.** The real first test. ~60% of sessions engage
+the form; the loss is inside it. Two or three login form variants (`L#`), the
+factor the original barcode omitted, measured on completion rather than
+engagement. At a ~40% completion base rate a 10% relative lift needs ~2,400 per
+arm — roughly 7,200 sessions total for three arms. Reachable.
 
-**Phase 3 — proposition test.** Within the credentialed branch, two or three
-genuinely different value propositions. Powered against the *undiluted* base
-rate, which is the point of having done Phase 2 first.
+**Phase 3 — mail/email token pilot.** A small drop with `?b=` tokens, arms
+pinned at mint time. Validates end-to-end attribution from letter to login on a
+known denominator, and opens account-level outcomes. Run email first — it
+returns in days.
 
-**Deferred — cosmetic MVT.** `BREAD_SPEC=legacy` works correctly and should not
-be the first thing run on it. Revisit only if traffic grows by an order of
-magnitude or a Phase 3 result suggests a specific interaction worth resolving.
+**Deferred — cosmetic MVT.** `BREAD_SPEC=legacy` works correctly and should
+still not be the first thing run on it. Headline and colour variants optimize a
+step that already converts at 60%. Revisit only if Phase 2 shows the login flow
+is not where the loss is.
 
 ---
 
@@ -259,9 +302,12 @@ magnitude or a Phase 3 result suggests a specific interaction worth resolving.
 
 These change the plan and cannot be answered from the codebase:
 
-- What can a visitor without their account number do today? If the answer is
-  "nothing meaningful," that is a product gap worth more than any test.
-- Is the mailed letter in scope for change? A QR code or personalized URL would
-  collapse the credential problem.
-- What share of paid clicks are no-letter intent? Available today from Google
-  Ads search terms, with no engineering.
+- **Of the ~60% who engage the login form, what fraction complete?** This is the
+  single most important unknown. It sizes the opportunity and sets the base rate
+  every power calculation depends on.
+- **Where in the flow do they fail** — account number entry, password, or MFA?
+  Determines whether the fix is a form change, a copy change, or an auth change.
+- **Eligible mobile paid sessions per month**, to convert "sessions per arm"
+  into a run length.
+- What share of paid clicks are no-letter intent? Believed low. Available from
+  Google Ads search terms with no engineering.
