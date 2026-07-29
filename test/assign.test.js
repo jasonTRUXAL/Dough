@@ -14,7 +14,7 @@ import { decide, deriveArm, DEFAULT_CONFIG, ARM_TEST, ARM_CONTROL } from '../src
 import { deriveBarcode, deriveFactors, formatBarcode, parseBarcode } from '../src/lib/barcode.js';
 import { checkEligibility, isAdsVisitor, isMobile } from '../src/lib/eligibility.js';
 import { COOKIE_NAME, decodeAssignmentCookie, encodeAssignmentCookie, parseCookies, serializeCookie } from '../src/lib/cookie.js';
-import { SPEC_LEGACY, SPEC_FOCUSED } from '../src/lib/spec.js';
+import { SPEC_LEGACY, SPEC_FOCUSED, SPEC_AA, specByName, specVersion } from '../src/lib/spec.js';
 import { indexFor } from '../src/lib/hash.js';
 
 const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
@@ -251,6 +251,77 @@ describe('enrolment', () => {
       }
     }
     assert.ok(sawTest, 'no test unit produced in 50 draws');
+  });
+});
+
+describe('A/A mode (pipeline calibration)', () => {
+  const aaArgs = () => ({
+    url: adsUrl(),
+    headers: mobileHeaders(),
+    cookies: {},
+    spec: SPEC_AA,
+    config: DEFAULT_CONFIG,
+    now: 1700000000000,
+    newId: uuidFactory(),
+  });
+
+  test('the aa spec is registered and carries no factors', () => {
+    assert.equal(specByName('aa'), SPEC_AA);
+    assert.equal(SPEC_AA.length, 0);
+  });
+
+  test('neither arm gets a barcode', () => {
+    // Both arms render identical content, so a barcode would label a
+    // distinction that does not exist.
+    const newId = uuidFactory();
+    const arms = new Set();
+    for (let i = 0; i < 50; i++) {
+      const decision = decide({ ...aaArgs(), newId });
+      assert.equal(decision.assignment.barcode, null);
+      assert.equal(decision.assignment.factors, null);
+      arms.add(decision.assignment.arm);
+    }
+    // ...but arms are still assigned, which is the whole point: the pipeline
+    // runs for real, it just has nothing to find.
+    assert.deepEqual([...arms].sort(), [ARM_CONTROL, ARM_TEST]);
+  });
+
+  test('enrolment, persistence and eligibility behave exactly as in a real test', () => {
+    const first = decide(aaArgs());
+    assert.equal(first.outcome, 'enrolled');
+    assert.equal(first.shouldSetCookie, true);
+
+    const returning = decide({
+      ...aaArgs(),
+      cookies: { [COOKIE_NAME]: encodeAssignmentCookie(first.assignment) },
+      newId: () => assert.fail('must not re-roll during an A/A test'),
+    });
+    assert.equal(returning.outcome, 'restored');
+    assert.equal(returning.assignment.arm, first.assignment.arm);
+
+    const organic = decide({ ...aaArgs(), url: new URL('https://x.test/') });
+    assert.equal(organic.outcome, 'ineligible');
+  });
+
+  test('spec version distinguishes A/A from a live spec', () => {
+    // Carried on every event so analysis can never silently pool results from
+    // two different spec versions.
+    assert.equal(specVersion(SPEC_AA), 'AA');
+    assert.equal(specVersion(SPEC_LEGACY), 'H12S17L3T3G4X3');
+    assert.notEqual(specVersion(SPEC_FOCUSED), specVersion(SPEC_LEGACY));
+  });
+
+  test('an A/A run shows no arm imbalance (the acceptance criterion)', () => {
+    // The check that would have caught the original control/test leakage.
+    const N = 60000;
+    let testCount = 0;
+    for (let i = 0; i < N; i++) {
+      if (deriveArm(`aa-run-${i}`, DEFAULT_CONFIG.testShareBps) === ARM_TEST) testCount++;
+    }
+    const expected = N / 2;
+    const srm = ((testCount - expected) ** 2) / expected
+      + ((N - testCount - expected) ** 2) / expected;
+    assert.ok(srm < 10.83, `A/A SRM chi-square ${srm.toFixed(2)} — pipeline suspect`);
   });
 });
 

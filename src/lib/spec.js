@@ -59,10 +59,34 @@ export const SPEC_FOCUSED = Object.freeze([
   Object.freeze({ key: 'H', name: 'headline', count: 3 }),
 ]);
 
+/**
+ * The A/A spec: no factors at all.
+ *
+ * Units are still enrolled, still assigned an arm, still persisted, still
+ * tracked — but both arms render identical content. Since nothing differs, a
+ * correct pipeline must report no difference. If it reports a winner, the
+ * pipeline is broken, and you have found that out for the price of a few weeks
+ * of traffic rather than a quarter and another failed programme.
+ *
+ * This is what to run first. See docs/experiment-design.md for the acceptance
+ * criteria.
+ */
+export const SPEC_AA = Object.freeze([]);
+
 const SPECS = {
+  aa: SPEC_AA,
   legacy: SPEC_LEGACY,
   focused: SPEC_FOCUSED,
 };
+
+/**
+ * A short label identifying which spec produced an assignment, carried on every
+ * event so that analysis can never silently pool results from two different
+ * spec versions.
+ */
+export function specVersion(spec) {
+  return spec.length === 0 ? 'AA' : spec.map((f) => `${f.key}${f.count}`).join('');
+}
 
 export function specByName(name) {
   const spec = SPECS[name];

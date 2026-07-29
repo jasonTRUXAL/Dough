@@ -20,7 +20,7 @@
 
 import { decide, DEFAULT_CONFIG } from './lib/assign.js';
 import { COOKIE_NAME, encodeAssignmentCookie, parseCookies, serializeCookie } from './lib/cookie.js';
-import { specByName } from './lib/spec.js';
+import { specByName, specVersion } from './lib/spec.js';
 
 export default async function handler(request, context = {}) {
   const env = context.env || {};
@@ -120,7 +120,7 @@ function injectBootstrap(html, decision, spec) {
   const payload = {
     outcome: decision.outcome,
     reason: decision.reason || null,
-    specVersion: spec.map((f) => `${f.key}${f.count}`).join(''),
+    specVersion: specVersion(spec),
     assignment: decision.assignment,
   };
 

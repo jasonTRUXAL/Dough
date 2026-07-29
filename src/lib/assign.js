@@ -99,15 +99,23 @@ export function decide({ url, headers, cookies = {}, spec, config = DEFAULT_CONF
 
 function buildAssignment(assignmentId, enrolledAt, spec, config) {
   const arm = deriveArm(assignmentId, config.testShareBps);
+
+  // Two cases produce no barcode:
+  //
+  //   control units — there is no varied content to label. The original stored
+  //     a visit counter (FC, RC1, RC2...) in the same analytics slot the test
+  //     arm used for barcodes, putting two different data types in one field and
+  //     making it unusable without knowing the arm first.
+  //
+  //   an empty spec (A/A) — both arms render identical content by definition, so
+  //     a barcode would be a label for a distinction that does not exist.
+  const varied = arm === ARM_TEST && spec.length > 0;
+
   return {
     assignmentId,
     enrolledAt,
     arm,
-    // Control units carry no barcode: there is no varied content to label. The
-    // original stored a visit counter (FC, RC1, RC2...) in the same analytics
-    // slot the test arm used for barcodes, which put two different data types
-    // in one field and made the field unusable without knowing the arm first.
-    barcode: arm === ARM_TEST ? deriveBarcode(assignmentId, spec) : null,
-    factors: arm === ARM_TEST ? deriveFactors(assignmentId, spec) : null,
+    barcode: varied ? deriveBarcode(assignmentId, spec) : null,
+    factors: varied ? deriveFactors(assignmentId, spec) : null,
   };
 }

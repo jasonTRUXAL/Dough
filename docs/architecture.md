@@ -117,27 +117,40 @@ one.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `BREAD_SPEC` | `legacy` | `legacy` (22,032 combos) or `focused` (9). See below. |
+| `BREAD_SPEC` | `legacy` | `aa` (no factors), `legacy` (22,032 combos) or `focused` (9). See below. |
 | `BREAD_TEST_SHARE_BPS` | `5000` | Basis points of 10,000. `5000` = 50/50, `1000` = 10% ramp. |
 | `BREAD_COOKIE_DOMAIN` | *(unset)* | **Must stay unset on DigitalOcean** — `ondigitalocean.app` is a public suffix, so a `Domain` attribute is silently rejected. In production set `.midlandcredit.com` so `accounts.midlandcredit.com` can read the assignment. |
 | `PORT` | `8080` | DigitalOcean adapter only. |
 
 ## Which spec to run
 
-`legacy` reproduces the original inventory (12x17x3x3x4x3) and exists for
-continuity with the existing content library. It is analysable **marginally**
-— each level estimated across every session that saw it — and hopeless at cell
-level.
+**Run `aa` first.** Both arms get identical content, so a correct pipeline must
+report no difference — any winner it reports is a bug. Everything else still
+runs for real: enrolment, cookies, the dataLayer push, `/collect`. It is the
+cheapest way to earn back trust in a system that previously produced nonsense.
+Acceptance criteria are in [experiment-design.md](experiment-design.md).
 
-`focused` is the recommendation: login form and headline, three levels each.
-Ordered by expected effect size the factors run
-`loginForm > headline > subheadline > heroGraphic > securityIcon ~ theme`, and
-the last two are very likely below the detection floor at any traffic level
-available here.
+`legacy` reproduces the original inventory (12x17x3x3x4x3) for continuity with
+the existing content library. It is analysable **marginally** — each level
+estimated across every session that saw it — and hopeless at cell level.
 
-At 50k test sessions: 12 headline arms gives ~4,200 per level against roughly
-14,700 needed to detect a 10% relative lift on a 10% base. Three arms gives
-~16,700. That is the whole argument.
+`focused` is login form and headline, three levels each.
+
+**Neither content spec should be the next thing you run**, and that is a
+correction to earlier advice in this repo. `focused` was recommended on the
+assumption that a headline swap might move conversion 10%, which needs ~14,700
+sessions per level. Realistically a headline swap moves it 1-3%, which needs
+~160,000 — so three arms is no more reachable than twelve. Cutting arms does not
+fix a test whose effects are below its detection floor.
+
+Worse, login requires an account number MCM **mails** to the customer, and there
+is no registration form. Visitors without their letter cannot convert at all, so
+they dilute every estimate — roughly a 6x sample penalty on top of everything
+above.
+
+The way out is testing larger differences, not shrinking the factor list. See
+[experiment-design.md](experiment-design.md) for the power tables and the
+recommended sequence.
 
 ## Running locally
 

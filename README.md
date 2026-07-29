@@ -10,6 +10,9 @@ the arm, the factor levels, and the barcode are all pure functions of it, so
 there is nothing to keep in sync and nothing to fall out of sync.
 
 - **[docs/architecture.md](docs/architecture.md)** — how it works and why
+- **[docs/experiment-design.md](docs/experiment-design.md)** — how to run a test
+  that can actually produce an answer. Read this before designing one; correct
+  infrastructure is necessary and nowhere near sufficient.
 - **[docs/bread-postmortem.md](docs/bread-postmortem.md)** — what the original
   deployment actually did, read from production, and the requirements derived
   from it
